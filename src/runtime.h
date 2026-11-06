@@ -61,6 +61,8 @@ int runtime_field_walk_install(unsigned char *image, uint64_t module_base, unsig
  * hides itself for a count of 0, with its stub written to `stubs` (`size` bytes, within rel32 reach
  * of the image, which is still writable). 0 when installed. */
 int runtime_dlc_bonus_install(unsigned char *image, uint64_t module_base, unsigned char *stubs, size_t size);
+/* Fifteen party sets instead of five (runtime_party_limit.c), the save's list extended on load. */
+int runtime_party_limit_install(unsigned char *image, uint64_t module_base, unsigned char *stubs, size_t size);
 const char *runtime_import_name(const char *name);
 uintptr_t runtime_rwlock_resolve(const char *name);
 void runtime_rwlock_report(void);

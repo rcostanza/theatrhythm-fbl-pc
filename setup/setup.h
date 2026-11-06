@@ -23,11 +23,13 @@ struct Options {
     std::filesystem::path game; // the dump folder or its eboot.bin
     std::filesystem::path save; // saves and the launch log (run.py's --user)
     std::optional<std::filesystem::path> copy_saves_from; // the old save folder, whose saves go to `save`
+    bool party_limit = true; // the patch for fifteen party sets (src/runtime_party_limit.c)
 };
 
-// The folders a release folder's paths.ini names.
+// What a release folder's paths.ini names.
 struct Paths {
     std::filesystem::path game, save;
+    bool party_limit = true;
 };
 
 // Save data in a save folder (what the runtime keeps there apart from the log).
@@ -58,6 +60,9 @@ std::filesystem::path exe_folder();
 std::filesystem::path game_folder(const std::filesystem::path& path);
 // What `root`/paths.ini names, if it names both folders.
 std::optional<Paths> read_paths(const std::filesystem::path& root);
+// Changes the party limit patch in `root`/paths.ini and nothing else, for a start with no new install.
+// Throws Error.
+void write_party_limit(const std::filesystem::path& root, bool on);
 // save/ in the release folder: a release is never zipped with one, so unpacking a newer release over
 // the folder keeps the saves.
 std::filesystem::path default_save();

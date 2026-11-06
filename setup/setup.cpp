@@ -280,7 +280,7 @@ std::wstring strip(const std::wstring& s) {
     return s.substr(a, s.find_last_not_of(ws) - a + 1);
 }
 
-void write_paths(const fs::path& ini, const fs::path& game, const fs::path& save) {
+void write_paths(const fs::path& ini, const fs::path& game, const fs::path& save, bool party_limit) {
 #ifdef _WIN32
     const std::string setup = "theatrhythm-setup.exe", cache = "%LOCALAPPDATA%\\Theatrhythm Final Bar Line";
 #else
@@ -294,7 +294,10 @@ void write_paths(const fs::path& ini, const fs::path& game, const fs::path& save
                     "; (cache=<folder> moves them)." + nl +
                     "[paths]" + nl +
                     "game=" + narrow(text(game)) + nl +
-                    "save=" + narrow(text(save)) + nl);
+                    "save=" + narrow(text(save)) + nl +
+                    "[patches]" + nl +
+                    "; party_limit: 1 for fifteen party sets, 0 for the game's five." + nl +
+                    "party_limit=" + (party_limit ? "1" : "0") + nl);
 }
 
 #ifndef _WIN32
@@ -449,10 +452,27 @@ std::optional<Paths> read_paths(const fs::path& root) {
             paths.game = clean(root / path_of(value));
         else if (key == L"save")
             paths.save = clean(root / path_of(value));
+        else if (key == L"party_limit")
+            paths.party_limit = value != L"0";
     }
     if (paths.game.empty() || paths.save.empty())
         return std::nullopt;
     return paths;
+}
+
+void write_party_limit(const fs::path& root, bool on) {
+    fs::path ini = root / L"paths.ini";
+    std::string text = read_text(ini), line = std::string("party_limit=") + (on ? "1" : "0");
+    size_t at = text.find("\nparty_limit=");
+    if (at != std::string::npos) {
+        size_t end = text.find_first_of("\r\n", at + 1);
+        text.replace(at + 1, end == std::string::npos ? end : end - at - 1, line);
+    } else {
+        if (!text.empty() && text.back() != '\n')
+            text += kNewline;
+        text += "[patches]" + std::string(kNewline) + line + kNewline;
+    }
+    write_text(ini, text);
 }
 
 fs::path default_save() {
@@ -552,8 +572,9 @@ fs::path install(const Options& opt, const Log& log) {
         }
         log(L"copied   saves from " + text(*opt.copy_saves_from));
     }
-    write_paths(root / L"paths.ini", game, save);
-    log(L"wrote    paths.ini (game " + text(game) + L", save " + text(save) + L")");
+    write_paths(root / L"paths.ini", game, save, opt.party_limit);
+    log(L"wrote    paths.ini (game " + text(game) + L", save " + text(save) + L", party limit " +
+        (opt.party_limit ? L"15" : L"5") + L")");
     return exe;
 }
 

@@ -82,7 +82,9 @@ static void shared_cache(char *out) {
     else snprintf(out, PATH_CHARS, "%s" SEP "cache", exe_dir);
 }
 
-/* game=, save= and cache= of paths.ini; 1 when game and save are there. */
+static int party_limit_off;
+
+/* game=, save=, cache= and party_limit= of paths.ini; 1 when game and save are there. */
 static int read_paths(const char *ini) {
     FILE *f = fopen(ini, "rb");
     if (!f) return 0;
@@ -100,6 +102,7 @@ static int read_paths(const char *ini) {
         if (!strcasecmp(key, "game")) set_path(game, value);
         else if (!strcasecmp(key, "save")) set_path(save, value);
         else if (!strcasecmp(key, "cache")) set_path(cache, value);
+        else if (!strcasecmp(key, "party_limit")) party_limit_off = !strcmp(value, "0");
     }
     fclose(f);
     if (!cache[0]) shared_cache(cache);
@@ -234,6 +237,7 @@ int launch_from_paths_ini(int *argc, char ***argv) {
     set_env("THEATRHYTHM_CONFIG_DEFAULT", config_default);
     /* Before anything asks the GPU library for its folders (shadps4 common/path_util.cpp). */
     set_env("THEATRHYTHM_GPU_USER_DIR", cache);
+    if (party_limit_off) set_env("THEATRHYTHM_PARTY_LIMIT", "0"); /* the setup's Patches box (src/probe.c) */
 
     int count = 0;
     args[count++] = (*argv)[0];

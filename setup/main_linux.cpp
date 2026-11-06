@@ -9,7 +9,7 @@
 // With arguments it installs from the command line:
 //
 //     theatrhythm-setup --game <dump or eboot.bin> [--save <folder>] [--copy-saves]
-//                       [--shortcut <folder>|desktop|menu]
+//                       [--party-limit on|off] [--shortcut <folder>|desktop|menu]
 
 #include "setup.h"
 
@@ -50,10 +50,12 @@ void err(const std::wstring& s) {
 
 constexpr wchar_t kUsage[] =
     L"usage: theatrhythm-setup --game <dump or eboot.bin> [--save <folder>] [--copy-saves]\n"
-    L"                         [--shortcut <folder>|desktop|menu]\n"
+    L"                         [--party-limit on|off] [--shortcut <folder>|desktop|menu]\n"
     L"  --game        the decrypted game dump (eboot.bin, sce_module, sce_sys, Media); only ever read\n"
     L"  --save        where your saves go (default: the one paths.ini names, else save/ here)\n"
     L"  --copy-saves  when --save changes, copy the saves from the old save folder\n"
+    L"  --party-limit on: fifteen party sets; off: the game's five, and the next save drops sets 6-15\n"
+    L"                (default: what paths.ini names, else on)\n"
     L"  --shortcut    also write the game's desktop entry into this folder, onto the Desktop or into\n"
     L"                the application menu\n"
     L"Sets up the folder this program is in. With no arguments, asks for the folders.";
@@ -67,13 +69,14 @@ fs::path shortcut_folder(const std::wstring& where) {
 }
 
 int run_cli(const std::vector<std::wstring>& args) {
-    std::wstring game, save, shortcut;
+    std::wstring game, save, shortcut, party_limit;
     bool copy_saves = false;
     for (size_t i = 0; i < args.size(); ++i) {
         const std::wstring& a = args[i];
         std::wstring* value = a == L"--game"       ? &game
                               : a == L"--save"     ? &save
                               : a == L"--shortcut" ? &shortcut
+                              : a == L"--party-limit" ? &party_limit
                                                    : nullptr;
         if (value && i + 1 < args.size()) {
             *value = args[++i];
@@ -88,12 +91,17 @@ int run_cli(const std::vector<std::wstring>& args) {
         err(std::wstring(kUsage) + L"\n\n--game is required");
         return 2;
     }
+    if (!party_limit.empty() && party_limit != L"on" && party_limit != L"off") {
+        err(std::wstring(kUsage) + L"\n\n--party-limit takes on or off");
+        return 2;
+    }
     try {
         setup::Options opt;
         opt.root = setup::exe_folder();
         opt.game = setup::path_of(game);
         auto old = setup::read_paths(opt.root);
         opt.save = !save.empty() ? setup::path_of(save) : old ? old->save : setup::default_save();
+        opt.party_limit = !party_limit.empty() ? party_limit == L"on" : !old || old->party_limit;
         if (copy_saves)
             opt.copy_saves_from = saves_to_move(opt.root, opt.save);
         fs::path exe = setup::install(opt, out);
@@ -289,10 +297,19 @@ int run_asking(Asker& ask) {
         return 1;
     }
 
+    // The current choice comes first, so Enter keeps it.
+    const bool party_limit = !paths || paths->party_limit;
+    const std::wstring limit_on = L"On (15 sets)", limit_off = L"Off (5 sets)";
+    int patch = ask.choose(L"Patches: Increase party limit to 15?\n\nWith this off, the game's next save drops sets 6-15.",
+                           {party_limit ? limit_on : limit_off, party_limit ? limit_off : limit_on, L"Cancel"});
+    if (patch < 0 || patch == 2)
+        return 1;
+
     setup::Options opt;
     opt.root = root;
     opt.game = *game;
     opt.save = save;
+    opt.party_limit = (patch == 0) == party_limit;
     try {
         if (auto old = saves_to_move(opt.root, opt.save)) {
             int answer = ask.choose(L"Copy your saves to the new save folder?\n\nFrom: " + setup::text(*old) +

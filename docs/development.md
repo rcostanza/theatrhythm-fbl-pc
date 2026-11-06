@@ -84,7 +84,8 @@ game's instructions for this CPU if needed, writes `settings.ini` from the templ
 none, and writes `paths.ini` with the game and save folders. No release contains a save folder, so
 unpacking a newer release over the folder keeps it. After that, the game asks for the setup once
 more, because `game/` was prepared for another `release.txt`. The command line does the same as the
-window: `theatrhythm-setup.exe --help`.
+window: `theatrhythm-setup.exe --help`. The setup's Patches section is saved in `paths.ini` too
+(`party_limit`), since `settings.ini` has a copy in the save folder that would win over the setup's.
 
 Started with no arguments, `theatrhythm-fbl.exe` reads `paths.ini` and builds the command line
 that `run.py` would pass (`src/launch.c`). Without a console its output goes to
@@ -127,6 +128,15 @@ idle from how far the character moved since the last frame, with thresholds made
 above that (an uncapped `fps_limit`) the party slid along in its idle pose. `src/runtime_field_walk.c`
 sends that comparison through a stub that divides the distance by (60 x `Time.deltaTime`)^2, so
 any frame rate reads like 60; at 60 fps the result is unchanged.
+
+The game keeps five party sets; `src/runtime_party_limit.c` makes it fifteen, in memory and all or
+nothing, the dump untouched. The list grows to 15 default sets after the constructor and the save
+reader, `_partyNumber`'s range and the `Mathf.Repeat(n, 5)` wraps of the selectors go to 15, and the
+preload and change detection cover the new sets. Places built for five stay five: Edit Party's dots
+and illustrations show the index modulo 5, and Multi Battle clamps its set to the first five. The
+numbers come from a `TermInfo.GetTranslation` hook, since only `Common/SetNo/1` to `5` exist.
+`party_limit=0` in `paths.ini` (or `THEATRHYTHM_PARTY_LIMIT=0`) leaves the game at five, and its next
+save then writes only those five, dropping sets 6-15.
 
 Scripted input for automated runs: `THEATRHYTHM_PAD_FILE` (held buttons and stick values, re-read
 when the file changes), `THEATRHYTHM_PAD_RECORD` (F9 records the pad) and `THEATRHYTHM_PAD_REPLAY`
