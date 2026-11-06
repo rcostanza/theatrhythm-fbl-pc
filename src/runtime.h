@@ -63,6 +63,8 @@ int runtime_field_walk_install(unsigned char *image, uint64_t module_base, unsig
 int runtime_dlc_bonus_install(unsigned char *image, uint64_t module_base, unsigned char *stubs, size_t size);
 /* Fifteen party sets instead of five (runtime_party_limit.c), the save's list extended on load. */
 int runtime_party_limit_install(unsigned char *image, uint64_t module_base, unsigned char *stubs, size_t size);
+/* The song setup window's set number, which UI.Text drops at 4K (runtime_party_label.c). */
+int runtime_party_label_install(unsigned char *image, uint64_t module_base, unsigned char *stubs, size_t size);
 const char *runtime_import_name(const char *name);
 uintptr_t runtime_rwlock_resolve(const char *name);
 void runtime_rwlock_report(void);

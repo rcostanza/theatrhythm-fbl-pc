@@ -138,6 +138,11 @@ numbers come from a `TermInfo.GetTranslation` hook, since only `Common/SetNo/1` 
 `party_limit=0` in `paths.ini` (or `THEATRHYTHM_PARTY_LIMIT=0`) leaves the game at five, and its next
 save then writes only those five, dropping sets 6-15.
 
+The set number in the song setup window is a `UnityEngine.UI.Text` with vertical overflow "Truncate"
+in a box barely taller than its font. At 4K (canvas scale 2) the text generator returned no lines for
+it, so the number was blank on any GPU. `src/runtime_party_label.c` sets that label to "Overflow"
+before its text is set; this is separate from the party limit patch.
+
 Scripted input for automated runs: `THEATRHYTHM_PAD_FILE` (held buttons and stick values, re-read
 when the file changes), `THEATRHYTHM_PAD_RECORD` (F9 records the pad) and `THEATRHYTHM_PAD_REPLAY`
 (see `src/runtime_pad.c`).
