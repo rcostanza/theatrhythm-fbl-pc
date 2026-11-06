@@ -13,18 +13,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* The registers a hook sees: the six argument registers (changes are passed on), and what the
- * game function returns when the hook returns 1. */
-typedef struct { uint64_t rdi, rsi, rdx, rcx, r8, r9, rax, rdx_out; } HookRegs;
-typedef int (ABI *HookFn)(HookRegs *regs);
-typedef struct {
-    uint64_t offset;             /* function in Il2CppUserAssemblies */
-    unsigned char length;        /* prologue bytes moved to the stub (no rip-relative operands) */
-    unsigned char prologue[16];
-    HookFn fn;
-    unsigned char floats;        /* xmm argument registers the game function takes (kept for it) */
-} Hook;
-
 static unsigned char *module;    /* Il2CppUserAssemblies in the image */
 static volatile int display_mode; /* the MS Settings page shows the display settings */
 
@@ -86,6 +74,7 @@ static int page_display;               /* the rows the page lists: 1 display set
 static int resorting;                  /* OnInitializeSetting called from here */
 static int forcing;                    /* retranslate(): the rows' texts translate again */
 static void *label_text;               /* LocalizedText being translated (SetTextByTermInfo) */
+static void *label_method;             /* the MethodInfo it was called with */
 static int display_dirty;              /* settings.ini needs saving */
 static struct { unsigned char *view; float x; int moved; } marked[2]; /* row views without their marks: label x, label moved */
 
@@ -608,7 +597,7 @@ static ABI int slider_set_index(HookRegs *r) {
 }
 
 /* LocalizedTextBase<T>::SetTextByTermInfo(this) (shared generic code): the text being translated. */
-static ABI int set_text_by_term(HookRegs *r) { label_text=(void *)r->rdi; return 0; }
+static ABI int set_text_by_term(HookRegs *r) { label_text=(void *)r->rdi; label_method=(void *)r->rsi; return 0; }
 /* LocalizedTextBase<T>::onLanguageChanged(this, from, to): skips a text whose language is `to`, so
  * retranslate() translates the rows' texts itself (SetTextByTermInfo of the same class: its code
  * only reads the class from the MethodInfo). */
@@ -624,6 +613,12 @@ static ABI int on_language_changed_b(HookRegs *r) { return on_language_changed(r
 static ABI int translate(HookRegs *r) {
     void *component=label_text; label_text=NULL;
     char term[80]; guest_string((const void *)r->rdi,term,sizeof(term));
+    void *named=runtime_party_names_translation(component,label_method,term,(const void *)r->rdi);
+    if (named) {
+        put((void *)r->rsi,(uint64_t)(uintptr_t)named);
+        r->rax=1;
+        return 1;
+    }
     const char *text=NULL;
     if (!strcmp(term,"Scene/Config/TopButton/007") && in_button(component)) text="Display Settings";
     else if (describing && !strcmp(term,"Common/DetailText/Config0007")) /* Logo Usage's description */
@@ -742,13 +737,13 @@ static unsigned char *xmm_slot(unsigned char *p, int store, int reg, int32_t dis
     p=emit(p,bytes,sizeof bytes);
     return emit(p,&disp,4);
 }
-/* Most bytes emit_hook_stub writes for `h`. */
-static size_t stub_size(const Hook *h) { return 144+16*(size_t)h->floats; }
+/* Most bytes runtime_hook_stub writes for `h`. */
+size_t runtime_hook_stub_size(const Hook *h) { return 144+16*(size_t)h->floats; }
 /* The stub for `h` at `p`: save the argument registers in a HookRegs on the stack, and after it the
  * xmm argument registers the function takes (the call stays 16-byte aligned: rsp is 8 mod 16 at the
  * function entry), call h->fn, then return its result or restore them, run the moved prologue and
  * jump back into the function. */
-static unsigned char *emit_hook_stub(unsigned char *p, const Hook *h, unsigned char *function) {
+unsigned char *runtime_hook_stub(unsigned char *p, const Hook *h, unsigned char *function) {
     static const int args[6]={7,6,2,1,8,9}; /* rdi rsi rdx rcx r8 r9 */
     const int32_t frame=72+16*h->floats;
     p=emit(p,(const unsigned char[]){0x48,0x81,0xec},3); p=emit(p,&frame,4); /* sub rsp,frame */
@@ -795,7 +790,7 @@ int runtime_display_page_install(unsigned char *image, uint64_t module_base, uns
             printf("Display page: game code differs at 0x%llx; the Options menu stays as it is\n",(unsigned long long)hooks[i].offset);
             return -1;
         }
-        need+=stub_size(&hooks[i]);
+        need+=runtime_hook_stub_size(&hooks[i]);
         const int64_t rel=(int64_t)(stubs+need-(module+hooks[i].offset+5)); /* the farthest its stub can be */
         if (rel!=(int32_t)rel || need>size) {
             printf("Display page: no room for the hook stubs; the Options menu stays as it is\n");
@@ -822,7 +817,7 @@ int runtime_display_page_install(unsigned char *image, uint64_t module_base, uns
     for (size_t i=0;i<sizeof(hooks)/sizeof(*hooks);++i) {
         unsigned char *function=module+hooks[i].offset;
         unsigned char *stub=p;
-        p=emit_hook_stub(p,&hooks[i],function);
+        p=runtime_hook_stub(p,&hooks[i],function);
         const int32_t rel32=(int32_t)(stub-(function+5));
         function[0]=0xe9; memcpy(function+1,&rel32,4);
         memset(function+5,0x90,hooks[i].length-5u); /* never run: the stub jumps past them */
